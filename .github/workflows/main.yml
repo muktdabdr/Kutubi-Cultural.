@@ -1,0 +1,43 @@
+name: Build APK
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Prepare project (unzip if ZIP was uploaded as-is)
+        run: |
+          for z in ./*.zip; do
+            [ -f "$z" ] && unzip -q -o "$z" -d _src
+          done
+          if [ -d _src ]; then
+            F=$(find _src -maxdepth 3 -name settings.gradle.kts | head -1)
+          else
+            F=$(find . -maxdepth 3 -name settings.gradle.kts -not -path './_src/*' | head -1)
+          fi
+          [ -n "$F" ] || { echo "settings.gradle.kts not found"; exit 1; }
+          echo "PROJECT_DIR=$(dirname "$F")" >> "$GITHUB_ENV"
+
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug --stacktrace --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kutubi-Cultural-APK
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
